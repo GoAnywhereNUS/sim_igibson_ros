@@ -2,6 +2,7 @@
 import logging
 import os
 
+import argparse
 import numpy as np
 import rospkg
 import rospy
@@ -73,11 +74,13 @@ class SimNode:
         self.right_cam = ExtraVisionSensor(self.env, self.right_cam_modalities, right_cam_pos, right_cam_orn)
 
 
-    def run(self):
+    def run(self, args):
         while not rospy.is_shutdown():
             obs, _, _, _ = self.env.step([self.cmdx, self.cmdy])
-            left_obs = self.left_cam.get_obs(self.env)
-            right_obs = self.right_cam.get_obs(self.env)
+            if args.enable_left_right_cams:
+                left_obs = self.left_cam.get_obs(self.env)
+                right_obs = self.right_cam.get_obs(self.env)
+
 
             rgb = (obs["rgb"] * 255).astype(np.uint8)
             normalized_depth = obs["depth"].astype(np.float32)
@@ -103,24 +106,25 @@ class SimNode:
             self.depth_raw_pub.publish(depth_raw_message)
 
             # Extra sensor data
-            if "rgb" in self.left_cam_modalities:
-                left_rgb = (left_obs["rgb"] * 255).astype(np.uint8)
-                left_rgb_message = self.bridge.cv2_to_imgmsg(left_depth, encoding="rgb8")
-                self.left_image_pub.publish(left_rgb_message)
-            if "rgb" in self.right_cam_modalities:
-                right_rgb = (right_obs["rgb"] * 255).astype(np.uint8)
-                right_rgb_message = self.bridge.cv2_to_imgmsg(right_depth, encoding="rgb8")
-                self.right_image_pub.publish(right_rgb_message)
-            if "depth" in self.left_cam_modalities:
-                left_normalized_depth = left_obs["depth"].astype(np.float32)
-                left_depth = left_normalized_depth * self.env.sensors["vision"].depth_high
-                left_depth_message = self.bridge.cv2_to_imgmsg(left_depth, encoding="passthrough")
-                self.left_depth_pub.publish(left_depth_message)
-            if "depth" in self.right_cam_modalities:
-                right_normalized_depth = right_obs["depth"].astype(np.float32)
-                right_depth = right_normalized_depth * self.env.sensors["vision"].depth_high
-                right_depth_message = self.bridge.cv2_to_imgmsg(right_depth, encoding="passthrough")
-                self.right_depth_pub.publish(right_depth_message)
+            if args.enable_left_right_cams:
+                if "rgb" in self.left_cam_modalities:
+                    left_rgb = (left_obs["rgb"] * 255).astype(np.uint8)
+                    left_rgb_message = self.bridge.cv2_to_imgmsg(left_depth, encoding="rgb8")
+                    self.left_image_pub.publish(left_rgb_message)
+                if "rgb" in self.right_cam_modalities:
+                    right_rgb = (right_obs["rgb"] * 255).astype(np.uint8)
+                    right_rgb_message = self.bridge.cv2_to_imgmsg(right_depth, encoding="rgb8")
+                    self.right_image_pub.publish(right_rgb_message)
+                if "depth" in self.left_cam_modalities:
+                    left_normalized_depth = left_obs["depth"].astype(np.float32)
+                    left_depth = left_normalized_depth * self.env.sensors["vision"].depth_high
+                    left_depth_message = self.bridge.cv2_to_imgmsg(left_depth, encoding="passthrough")
+                    self.left_depth_pub.publish(left_depth_message)
+                if "depth" in self.right_cam_modalities:
+                    right_normalized_depth = right_obs["depth"].astype(np.float32)
+                    right_depth = right_normalized_depth * self.env.sensors["vision"].depth_high
+                    right_depth_message = self.bridge.cv2_to_imgmsg(right_depth, encoding="passthrough")
+                    self.right_depth_pub.publish(right_depth_message)
 
             # Default sensor camera info
             msg = CameraInfo(
@@ -234,6 +238,11 @@ class SimNode:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--enable_left_right_cams", default=False, type=bool, 
+                        help="Enable additional left/right cameras on robot")
+    args = parser.parse_args()
+
     logging.basicConfig(level=logging.INFO)
-    node = SimNode()
-    node.run()
+    node = SimNode(args)
+    node.run(args)
